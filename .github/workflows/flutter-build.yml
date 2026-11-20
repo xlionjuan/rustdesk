@@ -12,6 +12,9 @@ on:
       publish-update-metadata:
         type: boolean
         default: false
+      unattended-wayland-rpm:
+        type: boolean
+        default: false
 
 # NOTE: F-Droid builder script 'flutter/build_fdroid.sh' reads environment
 # variables from this workflow!
@@ -100,6 +103,7 @@ jobs:
         run: python res/update/generate_update_metadata.py check-key
 
   generate-sbom:
+    if: ${{ !inputs.unattended-wayland-rpm }}
     needs: [validate-update-metadata-keys]
     runs-on: ubuntu-latest
 
@@ -133,6 +137,7 @@ jobs:
     uses: ./.github/workflows/bridge.yml
 
   build-RustDeskTempTopMostWindow:
+    if: ${{ !inputs.unattended-wayland-rpm }}
     needs: [validate-update-metadata-keys]
     uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
     strategy:
@@ -581,6 +586,7 @@ jobs:
 
   # The fallback for the flutter version, we use Sciter for 32bit Windows.
   build-for-windows-sciter:
+    if: ${{ !inputs.unattended-wayland-rpm }}
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     needs: [validate-update-metadata-keys]
     runs-on: ${{ matrix.job.os }}
@@ -915,6 +921,7 @@ jobs:
 
 
   build-for-macOS:
+    if: ${{ !inputs.unattended-wayland-rpm }}
     name: ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
     needs: [generate-bridge]
@@ -1426,6 +1433,7 @@ jobs:
           files: rustdesk-${{ env.VERSION }}-unsigned.tar.gz
 
   build-rustdesk-android:
+    if: ${{ !inputs.unattended-wayland-rpm }}
     needs: [generate-bridge]
     name: build rustdesk android apk ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
@@ -1918,6 +1926,7 @@ jobs:
             signed-apk/rustdesk-${{ env.VERSION }}-universal${{ env.suffix }}.apk
 
   build-rustdesk-linux:
+    if: ${{ !inputs.unattended-wayland-rpm }}
     needs: [generate-bridge]
     name: build rustdesk linux ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.on }}
@@ -2571,6 +2580,36 @@ jobs:
             exit 1
           fi
         shell: bash
+
+      - name: Package unattended Wayland RPM
+        if: inputs.unattended-wayland-rpm
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm
+          version=$(dpkg-deb -f "$DRM_DEB" Version)
+          rpm_root="$RUNNER_TEMP/unattended-wayland-rpm"
+          rpmbuild -bb res/rpm-unattended-wayland.spec \
+            --define "_topdir $rpm_root" \
+            --define "drm_deb $GITHUB_WORKSPACE/$DRM_DEB" \
+            --define "drm_version $version"
+          rpm="$rpm_root/RPMS/x86_64/rustdesk-unattended-wayland-$version-0.x86_64.rpm"
+          files=$(rpm -qpl "$rpm")
+          grep -Fx /usr/lib/rustdesk/libdrmtap.so.0 <<< "$files"
+          grep -Ex '/usr/lib/rustdesk/libdrmtap\.so\.0\.[0-9]+\.[0-9]+' <<< "$files"
+          grep -Fx /usr/share/rustdesk/lib/librustdesk.so <<< "$files"
+          grep -Fx /usr/lib/systemd/system/rustdesk.service <<< "$files"
+          grep -Fx /usr/bin/rustdesk <<< "$files"
+          cp "$rpm" .
+          echo "DRM_RPM=${rpm##*/}" >> "$GITHUB_ENV"
+        shell: bash
+
+      - name: Upload unattended Wayland RPM
+        if: inputs.unattended-wayland-rpm
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unattended-wayland-rpm
+          path: ${{ env.DRM_RPM }}
+          if-no-files-found: error
 
       - name: Publish debian package
         if: env.UPLOAD_ARTIFACT == 'true'

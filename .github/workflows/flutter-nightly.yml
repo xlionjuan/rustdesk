@@ -5,11 +5,43 @@ on:
     # schedule build every night
     - cron: "0 0 * * *"
   workflow_dispatch:
+    inputs:
+      unattended-wayland-rpm:
+        description: Build and publish the x86_64 unattended Wayland RPM
+        type: boolean
+        default: false
 
 jobs:
   run-flutter-nightly-build:
+    if: ${{ !inputs.unattended-wayland-rpm }}
     uses: ./.github/workflows/flutter-build.yml
     secrets: inherit
     with:
       upload-artifact: true
       upload-tag: "nightly"
+
+  build-unattended-wayland-rpm:
+    if: inputs.unattended-wayland-rpm
+    permissions:
+      contents: write
+    uses: ./.github/workflows/flutter-build.yml
+    with:
+      upload-artifact: false
+      unattended-wayland-rpm: true
+
+  publish-unattended-wayland-rpm:
+    needs: build-unattended-wayland-rpm
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: unattended-wayland-rpm
+      - uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
+        with:
+          tag_name: unattended-wayland-rpm-${{ github.run_id }}
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          files: rustdesk-unattended-wayland-*.x86_64.rpm
+          fail_on_unmatched_files: true
