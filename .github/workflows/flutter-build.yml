@@ -2590,6 +2590,36 @@ jobs:
           name: ${{ env.DRM_DEB }}
           path: ${{ env.DRM_DEB }}
 
+      - name: Build unattended Wayland RPM
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm
+          version=$(dpkg-deb -f "$DRM_DEB" Version)
+          rpm_root="$RUNNER_TEMP/rpmbuild"
+          HBB="$PWD" rpmbuild -bb res/rpm-flutter-drm.spec \
+            --define "_topdir $rpm_root" --define "drm_version $version"
+          rpm="rustdesk-unattended-wayland-$version-0.x86_64.rpm"
+          mv "$rpm_root/RPMS/x86_64/$rpm" .
+          echo "DRM_RPM=$rpm" >> "$GITHUB_ENV"
+        shell: bash
+
+      - name: Publish unattended Wayland RPM
+        if: env.UPLOAD_ARTIFACT == 'true'
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: ${{ env.DRM_RPM }}
+          fail_on_unmatched_files: true
+
+      - name: Upload unattended Wayland RPM
+        if: always() && env.DRM_RPM != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ env.DRM_RPM }}
+          path: ${{ env.DRM_RPM }}
+          if-no-files-found: error
+
   build-rustdesk-linux-sciter:
     if: ${{ inputs.upload-artifact }}
     needs: [validate-update-metadata-keys]
