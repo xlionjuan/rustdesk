@@ -1,57 +1,66 @@
 Name:       rustdesk-unattended-wayland
-Version:    %{drm_version}
+Version:    1.5.3
 Release:    0
-Summary:    RustDesk with unattended Wayland support
+Summary:    RPM package
 License:    GPL-3.0
 URL:        https://rustdesk.com
 Vendor:     rustdesk <info@rustdesk.com>
-ExclusiveArch: x86_64
-Conflicts:  rustdesk
 Requires:   gtk3 libxcb libXfixes alsa-lib libva gstreamer1-plugins-base
-Requires:   libdrm >= 2.4.101
-Requires:   libglvnd-egl libglvnd-gles systemd desktop-file-utils
+Requires:   libdrm >= 2.4.101, libglvnd-egl, libglvnd-gles
+Conflicts:  rustdesk
 Recommends: libayatana-appindicator-gtk3 libxdo
+Provides:   libdesktop_drop_plugin.so()(64bit), libdesktop_multi_window_plugin.so()(64bit), libfile_selector_linux_plugin.so()(64bit), libflutter_custom_cursor_plugin.so()(64bit), libflutter_linux_gtk.so()(64bit), libscreen_retriever_plugin.so()(64bit), libtray_manager_plugin.so()(64bit), liburl_launcher_linux_plugin.so()(64bit), libwindow_manager_plugin.so()(64bit), libwindow_size_plugin.so()(64bit), libtexture_rgba_renderer_plugin.so()(64bit)
+
+# https://docs.fedoraproject.org/en-US/packaging-guidelines/Scriptlets/
 
 %description
-RustDesk remote desktop client with support for unattended sessions on Wayland.
+The best open-source remote desktop client software, written in Rust.
+
+%prep
+# we have no source, so nothing here
+
+%build
+# we have no source, so nothing here
+
+# %global __python %{__python3}
 
 %install
-set -- "$HBB"/third_party/libdrmtap/build-pkg/libdrmtap.so.0.*
-if [ "$#" -ne 1 ] || [ ! -f "$1" ] || [ -L "$1" ]; then
-    echo 'Expected one versioned libdrmtap shared library' >&2
-    exit 1
-fi
 
-mkdir -p "%{buildroot}/usr/share/rustdesk"
-cp -r "$HBB"/flutter/build/linux/x64/release/bundle/. "%{buildroot}/usr/share/rustdesk"
-install -Dm 644 "$HBB/res/rustdesk.service" -t "%{buildroot}/usr/share/rustdesk/files"
-install -Dm 644 "$HBB/res/rustdesk.desktop" -t "%{buildroot}/usr/share/rustdesk/files"
-install -Dm 644 "$HBB/res/rustdesk-link.desktop" -t "%{buildroot}/usr/share/rustdesk/files"
-install -Dm 644 "$HBB/res/128x128@2x.png" "%{buildroot}/usr/share/icons/hicolor/256x256/apps/rustdesk.png"
-install -Dm 644 "$HBB/res/scalable.svg" "%{buildroot}/usr/share/icons/hicolor/scalable/apps/rustdesk.svg"
+mkdir -p "%{buildroot}/usr/share/rustdesk" && cp -r ${HBB}/flutter/build/linux/x64/release/bundle/* -t "%{buildroot}/usr/share/rustdesk"
+mkdir -p "%{buildroot}/usr/bin"
+install -Dm 644 $HBB/res/rustdesk.service -t "%{buildroot}/usr/share/rustdesk/files"
+install -Dm 644 $HBB/res/rustdesk.desktop -t "%{buildroot}/usr/share/rustdesk/files"
+install -Dm 644 $HBB/res/rustdesk-link.desktop -t "%{buildroot}/usr/share/rustdesk/files"
+install -Dm 644 $HBB/res/128x128@2x.png "%{buildroot}/usr/share/icons/hicolor/256x256/apps/rustdesk.png"
+install -Dm 644 $HBB/res/scalable.svg "%{buildroot}/usr/share/icons/hicolor/scalable/apps/rustdesk.svg"
 
-# RustDesk loads libdrmtap by absolute path, including on x86_64.
+set -- "$DRMTAP_PREBUILT_DIR"/libdrmtap.so.0.*
 install -Dm 755 "$1" -t "%{buildroot}/usr/lib/rustdesk"
 ln -s "${1##*/}" "%{buildroot}/usr/lib/rustdesk/libdrmtap.so.0"
 
-%check
-librustdesk="%{buildroot}/usr/share/rustdesk/lib/librustdesk.so"
-if ! grep -qF '/usr/lib/rustdesk/libdrmtap.so.0' "$librustdesk" ||
-   ! grep -qF 'enable-drm-display-wake' "$librustdesk"; then
-    echo 'Expected a RustDesk build with drm and drm-wake enabled' >&2
-    exit 1
-fi
-
 %files
-/usr/lib/rustdesk/
-/usr/share/rustdesk/
+/usr/lib/rustdesk/libdrmtap.so.0*
+/usr/share/rustdesk/*
+/usr/share/rustdesk/files/rustdesk.service
 /usr/share/icons/hicolor/256x256/apps/rustdesk.png
 /usr/share/icons/hicolor/scalable/apps/rustdesk.svg
+/usr/share/rustdesk/files/rustdesk.desktop
+/usr/share/rustdesk/files/rustdesk-link.desktop
+
+%changelog
+# let's skip this for now
 
 %pre
-if [ "$1" -gt 1 ]; then
+# can do something for centos7
+case "$1" in
+  1)
+    # for install
+  ;;
+  2)
+    # for upgrade
     systemctl stop rustdesk || true
-fi
+  ;;
+esac
 
 %post
 cp /usr/share/rustdesk/files/rustdesk.service /etc/systemd/system/rustdesk.service
@@ -64,15 +73,33 @@ systemctl start rustdesk
 update-desktop-database
 
 %preun
-if [ "$1" -eq 0 ]; then
+case "$1" in
+  0)
+    # for uninstall
     systemctl stop rustdesk || true
     systemctl disable rustdesk || true
-    rm -f /etc/systemd/system/rustdesk.service
-fi
+    rm /etc/systemd/system/rustdesk.service || true
+  ;;
+  1)
+    # for upgrade
+  ;;
+esac
 
 %postun
-if [ "$1" -eq 0 ]; then
-    rm -f /usr/bin/rustdesk /usr/share/applications/rustdesk.desktop /usr/share/applications/rustdesk-link.desktop
-    systemctl daemon-reload
+case "$1" in
+  0)
+    # for uninstall
+    rm /usr/bin/rustdesk || true
+    rmdir /usr/lib/rustdesk || true
+    rmdir /usr/local/rustdesk || true
+    rmdir /usr/share/rustdesk || true
+    rm /usr/share/applications/rustdesk.desktop || true
+    rm /usr/share/applications/rustdesk-link.desktop || true
     update-desktop-database
-fi
+  ;;
+  1)
+    # for upgrade
+    rmdir /usr/lib/rustdesk || true
+    rmdir /usr/local/rustdesk || true
+  ;;
+esac

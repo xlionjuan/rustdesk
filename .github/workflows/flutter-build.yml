@@ -2540,6 +2540,24 @@ jobs:
               mv "$name" "${name%%.deb}-x86_64.deb"
             done
 
+            # rpm package
+            echo -e "start packaging fedora package"
+            pushd /workspace
+            HBB=`pwd` rpmbuild ./res/rpm-flutter-drm.spec -bb
+            pushd ~/rpmbuild/RPMS/x86_64
+            for name in rustdesk*??.rpm; do
+                mv "$name" /workspace/"${name%%.rpm}.rpm"
+            done
+
+            # rpm suse package
+            echo -e "start packaging suse package"
+            pushd /workspace
+            HBB=`pwd` rpmbuild ./res/rpm-flutter-drm-suse.spec -bb
+            pushd ~/rpmbuild/RPMS/x86_64
+            for name in rustdesk*??.rpm; do
+                mv "$name" /workspace/"${name%%.rpm}-suse.rpm"
+            done
+
       # build.py can exit 0 on some inner failures, so check the artifact rather than the status.
       # The package name is the informed consent for consent-free capture, so a stock binary must
       # never ship under it: assert the bundled library AND the dlopen path in the binary.
@@ -2572,7 +2590,7 @@ jobs:
           fi
         shell: bash
 
-      - name: Publish debian package
+      - name: Publish debian/rpm package
         if: env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
         with:
@@ -2580,6 +2598,7 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           files: |
             ${{ env.DRM_DEB }}
+            rustdesk-unattended-wayland-*.rpm
 
       # No UPLOAD_ARTIFACT gate: on a PR this is the only way to get at the deb that was just built.
       # always(), because a deb that failed the check above is the one most worth downloading.
@@ -2589,36 +2608,6 @@ jobs:
         with:
           name: ${{ env.DRM_DEB }}
           path: ${{ env.DRM_DEB }}
-
-      - name: Build unattended Wayland RPM
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y rpm
-          version=$(dpkg-deb -f "$DRM_DEB" Version)
-          rpm_root="$RUNNER_TEMP/rpmbuild"
-          HBB="$PWD" rpmbuild -bb res/rpm-flutter-drm.spec \
-            --define "_topdir $rpm_root" --define "drm_version $version"
-          rpm="rustdesk-unattended-wayland-$version-0.x86_64.rpm"
-          mv "$rpm_root/RPMS/x86_64/$rpm" .
-          echo "DRM_RPM=$rpm" >> "$GITHUB_ENV"
-        shell: bash
-
-      - name: Publish unattended Wayland RPM
-        if: env.UPLOAD_ARTIFACT == 'true'
-        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
-        with:
-          prerelease: true
-          tag_name: ${{ env.TAG_NAME }}
-          files: ${{ env.DRM_RPM }}
-          fail_on_unmatched_files: true
-
-      - name: Upload unattended Wayland RPM
-        if: always() && env.DRM_RPM != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ${{ env.DRM_RPM }}
-          path: ${{ env.DRM_RPM }}
-          if-no-files-found: error
 
   build-rustdesk-linux-sciter:
     if: ${{ inputs.upload-artifact }}
