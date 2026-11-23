@@ -2600,14 +2600,16 @@ jobs:
             ${{ env.DRM_DEB }}
             rustdesk-unattended-wayland-*.rpm
 
-      # No UPLOAD_ARTIFACT gate: on a PR this is the only way to get at the deb that was just built.
+      # No UPLOAD_ARTIFACT gate: on a PR this is the only way to get at the packages that were just built.
       # always(), because a deb that failed the check above is the one most worth downloading.
-      - name: Upload deb
+      - name: Upload deb/rpm
         if: always() && env.DRM_DEB != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.DRM_DEB }}
-          path: ${{ env.DRM_DEB }}
+          path: |
+            ${{ env.DRM_DEB }}
+            rustdesk-unattended-wayland-*.rpm
 
   build-rustdesk-linux-sciter:
     if: ${{ inputs.upload-artifact }}
